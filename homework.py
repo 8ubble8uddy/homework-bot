@@ -70,25 +70,25 @@ def main():
                 logger.info(f'Сообщение было отправлено: {result}.')
                 break
             logger.debug('Работа не проверена.')
-            restart_after(10)
+            restart_after(20 * 60)
 
         except Exception as e:
             message = f'Бот упал с ошибкой: {e}.'
             logger.exception(message)
             i += 1
             if i > 1:
-                restart_after(60)
+                restart_after(5 * 60)
                 continue
             try:
                 logger.debug(f'Отправляется сообщение: {message}.')
                 result = send_message(message)
                 logger.info(f'Сообщение было отправлено: {result}.')
-                restart_after(60)
+                restart_after(5 * 60)
             except Exception:
                 i = 0
                 message = f'Не удалось отправить уведомление об ошибке {e}.'
                 logger.exception(message)
-                restart_after(60)
+                restart_after(5 * 60)
 
 
 if __name__ == '__main__':
