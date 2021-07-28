@@ -19,30 +19,85 @@ load_dotenv()
 PRAKTIKUM_TOKEN = os.getenv('PRAKTIKUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+ROOT_API_URL = 'https://praktikum.yandex.ru'
 
 bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
 
+class InvalidApiKeyExpection(Exception):
+    pass
+
+
+class InvalidApiValueException(Exception):
+    pass
+
+
+class FailedApiRequestException(Exception):
+    pass
+
+
 def parse_homework_status(homework):
-    homework_name = homework['homework_name']
-    homework_status = homework['status']
-    if homework_status == 'rejected':
-        verdict = 'К сожалению, в работе нашлись ошибки.'
+    logger.debug('Проверка значений homework на соответствие ожиданиям.')
+    try:
+        homework_name = homework['homework_name']
+        status = homework['status']
+        homework_statuses = ['rejected', 'approved']
+        assert status in homework_statuses
+    except KeyError as key:
+        msg = f'Ключ {key} отсутствует в массиве значений по ключу "homeworks"'
+        raise InvalidApiKeyExpection(msg)
+    except AssertionError:
+        msg = f'{homework_name} получил неизвестный статус - {status}.'
+        raise InvalidApiValueException(msg)
     else:
-        verdict = 'Ревьюеру всё понравилось, работа зачтена!'
-    return f'У вас проверили работу "{homework_name}"!\n\n{verdict}'
+        logger.debug('Работа проверена!')
+        if status == 'rejected':
+            verdict = 'К сожалению, в работе нашлись ошибки.'
+        if status == 'approved':
+            verdict = 'Ревьюеру всё понравилось, работа зачтена!'
+        return f'У вас проверили работу "{homework_name}"!\n\n{verdict}'
+
+
+def check_homework(response):
+    logger.debug('Проверка значений response на соответствие ожиданиям.')
+    try:
+        homework = response['homeworks']
+    except KeyError as key:
+        msg = f'Ключ {key} отсутствует в объекте полученных данных response.'
+        raise InvalidApiKeyExpection(msg)
+    else:
+        logger.info(f'Получен массив значений по ключу "homeworks" {homework}')
+        return homework[0]
 
 
 def get_homeworks(current_timestamp):
-    url = 'https://praktikum.yandex.ru/api/user_api/homework_statuses/'
+    logger.debug('Отправляется запрос к API сервису Практикум.Домашка.')
+    url = f'{ROOT_API_URL}/api/user_api/homework_statuses/'
     headers = {'Authorization': f'OAuth {PRAKTIKUM_TOKEN}'}
     payload = {'from_date': current_timestamp}
-    homework_statuses = requests.get(url, headers=headers, params=payload)
-    return homework_statuses.json()
+    try:
+        homework_statuses = requests.get(url, headers=headers, params=payload)
+        response = homework_statuses.json()
+    except Exception as request:
+        msg = f'При GET-запросе ресурса {url} произошла ошибка {request}.'
+        raise FailedApiRequestException(msg)
+    else:
+        logger.info(f'Получен ответ: {response}.')
+        return response
 
 
 def send_message(message):
-    return bot.send_message(chat_id=CHAT_ID, text=message)
+    while True:
+        try:
+            logger.debug(f'Отправка сообщения: {message}.')
+            result = bot.send_message(chat_id=CHAT_ID, text=message)
+        except telegram.error.TelegramError as tg:
+            msg = f'При отправке сообщения {message} произошла ошибка {tg}.'
+            logger.exception(msg)
+            restart_after(5 * 60)
+        else:
+            logger.info(f'Сообщение было отправлено: {result}.')
+            return result
 
 
 def restart_after(seconds):
@@ -54,41 +109,32 @@ def restart_after(seconds):
 
 def main():
     current_timestamp = int(time.time())
-    i = 0
+    is_sent_message = False
 
     while True:
         try:
-            logger.debug('Отправляется запрос к API сервису Практикум.Домашка')
-            homeworks = get_homeworks(current_timestamp)
-            logger.info(f'Получен ответ: {homeworks}')
-            if homeworks['homeworks']:
-                logger.debug('Работа проверена!')
-                homework = homeworks['homeworks'][0]
-                message = parse_homework_status(homework)
-                logger.debug(f'Отправляется сообщение: {message}.')
-                result = send_message(message)
-                logger.info(f'Сообщение было отправлено: {result}.')
-                break
-            logger.debug('Работа не проверена.')
-            restart_after(20 * 60)
+            response = get_homeworks(current_timestamp)
+            homework = check_homework(response)
+            message = parse_homework_status(homework)
+            send_message(message)
+
+        except IndexError:
+            message = 'Работа не проверена.'
+            logger.debug(message)
 
         except Exception as e:
-            message = f'Бот упал с ошибкой: {e}.'
+            message = f'Бот упал с ошибкой: {e}'
             logger.exception(message)
-            i += 1
-            if i > 1:
-                restart_after(5 * 60)
-                continue
-            try:
-                logger.debug(f'Отправляется сообщение: {message}.')
-                result = send_message(message)
-                logger.info(f'Сообщение было отправлено: {result}.')
-                restart_after(5 * 60)
-            except Exception:
-                i = 0
-                message = f'Не удалось отправить уведомление об ошибке {e}.'
-                logger.exception(message)
-                restart_after(5 * 60)
+            if not is_sent_message:
+                send_message(message)
+            is_sent_message = True
+
+        else:
+            is_sent_message = False
+            current_timestamp = int(time.time())
+
+        finally:
+            restart_after(20 * 60)
 
 
 if __name__ == '__main__':
