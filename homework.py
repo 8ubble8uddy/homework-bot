@@ -41,20 +41,23 @@ def parse_homework_status(homework):
     try:
         homework_name = homework['homework_name']
         status = homework['status']
-        homework_statuses = ['rejected', 'approved']
+        homework_statuses = ['reviewing', 'rejected', 'approved']
         assert status in homework_statuses
     except KeyError as key:
         msg = f'Ключ {key} отсутствует в массиве значений по ключу "homeworks"'
         raise InvalidApiKeyExpection(msg)
     except AssertionError:
-        msg = f'{homework_name} получил неизвестный статус - {status}.'
+        msg = f'{homework_name} получил неизвестный статус - {status}'
         raise InvalidApiValueException(msg)
     else:
-        logger.debug('Работа проверена!')
+        logger.debug('Работа поступила на рассмотрение.')
         if status == 'rejected':
             verdict = 'К сожалению, в работе нашлись ошибки.'
-        if status == 'approved':
+        elif status == 'approved':
             verdict = 'Ревьюеру всё понравилось, работа зачтена!'
+        else:
+            return f'У вас взяли работу "{homework_name}" на проверку.'
+        logger.debug('Работа проверена!')
         return f'У вас проверили работу "{homework_name}"!\n\n{verdict}'
 
 
@@ -63,7 +66,7 @@ def check_homework(response):
     try:
         homework = response['homeworks']
     except KeyError as key:
-        msg = f'Ключ {key} отсутствует в объекте полученных данных response.'
+        msg = f'Ключ {key} отсутствует в объекте полученных данных response'
         raise InvalidApiKeyExpection(msg)
     else:
         logger.info(f'Получен массив значений по ключу "homeworks" {homework}')
@@ -79,24 +82,24 @@ def get_homeworks(current_timestamp):
         homework_statuses = requests.get(url, headers=headers, params=payload)
         response = homework_statuses.json()
     except Exception as request:
-        msg = f'При GET-запросе ресурса {url} произошла ошибка {request}.'
+        msg = f'При GET-запросе ресурса {url} произошла ошибка {request}'
         raise FailedApiRequestException(msg)
     else:
-        logger.info(f'Получен ответ: {response}.')
+        logger.info(f'Получен ответ: {response}')
         return response
 
 
 def send_message(message):
     while True:
         try:
-            logger.debug(f'Отправка сообщения: {message}.')
+            logger.debug(f'Отправка сообщения: {message}')
             result = bot.send_message(chat_id=CHAT_ID, text=message)
         except telegram.error.TelegramError as tg:
             msg = f'При отправке сообщения {message} произошла ошибка {tg}.'
             logger.exception(msg)
             restart_after(5 * 60)
         else:
-            logger.info(f'Сообщение было отправлено: {result}.')
+            logger.info(f'Сообщение было отправлено: {result}')
             return result
 
 
@@ -123,7 +126,7 @@ def main():
             logger.debug(message)
 
         except Exception as e:
-            message = f'Бот упал с ошибкой: {e}'
+            message = f'Бот упал с ошибкой: {e}.'
             logger.exception(message)
             if not is_sent_message:
                 send_message(message)
