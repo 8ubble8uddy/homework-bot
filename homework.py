@@ -24,15 +24,15 @@ ROOT_API_URL = 'https://practicum.yandex.ru'
 bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
 
-class InvalidApiKeyExpection(Exception):
+class InvalidApiKeyError(Exception):
     pass
 
 
-class InvalidApiValueException(Exception):
+class InvalidApiValueError(Exception):
     pass
 
 
-class FailedApiRequestException(Exception):
+class FailedApiRequestError(Exception):
     pass
 
 
@@ -45,10 +45,10 @@ def parse_homework_status(homework):
         assert status in homework_statuses
     except KeyError as key:
         msg = f'Ключ {key} отсутствует в массиве значений по ключу "homeworks"'
-        raise InvalidApiKeyExpection(msg)
+        raise InvalidApiKeyError(msg)
     except AssertionError:
         msg = f'{homework_name} получил неизвестный статус - {status}'
-        raise InvalidApiValueException(msg)
+        raise InvalidApiValueError(msg)
     else:
         logger.debug('Работа поступила на рассмотрение.')
         if status == 'rejected':
@@ -67,7 +67,7 @@ def check_homework(response):
         homework = response['homeworks']
     except KeyError as key:
         msg = f'Ключ {key} отсутствует в объекте полученных данных response'
-        raise InvalidApiKeyExpection(msg)
+        raise InvalidApiKeyError(msg)
     else:
         logger.info(f'Получен массив значений по ключу "homeworks" {homework}')
         return homework[0]
@@ -83,7 +83,7 @@ def get_homeworks(current_timestamp):
         response = homework_statuses.json()
     except Exception as request:
         msg = f'При GET-запросе ресурса {url} произошла ошибка {request}'
-        raise FailedApiRequestException(msg)
+        raise FailedApiRequestError(msg)
     else:
         logger.info(f'Получен ответ: {response}')
         return response
