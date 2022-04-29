@@ -8,4 +8,4 @@ RUN pip3 install -r requirements.txt --no-cache-dir
 
 COPY . ./
 
-CMD ["python3", "homework.py"]
+CMD ["python3", "api_praktikum.py"]
